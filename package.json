@@ -1,0 +1,8 @@
+{
+  "name": "jokkonote-sync",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server/sync-server.mjs"
+  }
+}

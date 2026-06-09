@@ -1,0 +1,11 @@
+# Déploiement sync prof → élève (1 clic sur Render)
+# Dashboard → New → Blueprint → repo JokkoNote
+services:
+  - type: web
+    name: jokko-sync
+    runtime: node
+    plan: free
+    branch: main
+    buildCommand: echo "Sync server — pas de build"
+    startCommand: node server/sync-server.mjs
+    healthCheckPath: /health
