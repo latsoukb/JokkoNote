@@ -126,8 +126,9 @@ export const saveTeacher = async (teacher) => {
 
 export const seedDemoTeacherIfEmpty = async () => {
   const list = await listTeachers();
-  if (list.length) return;
+  if (list.some((t) => t.login === 'diop')) return;
   const demo = createTeacherRecord('diop', 'jokko2026', 'M. Diop');
   demo.id = 't-diop';
   await saveTeacher(demo);
+  console.log('Compte démo créé : diop / jokko2026');
 };
