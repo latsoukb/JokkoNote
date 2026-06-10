@@ -90,7 +90,7 @@ export const TeacherProvider = ({ children }) => {
   );
 
   const sendToClass = useCallback(
-    async ({ title, body, type, attachment }) => {
+    async ({ title, body, type, attachment, deadlineAt }) => {
       if (!teacher || !activeClassId) throw new Error('Non connecté');
       if (!isSyncConfigured()) throw new Error('Serveur sync non configuré');
       setSending(true);
@@ -102,6 +102,7 @@ export const TeacherProvider = ({ children }) => {
           teacherId: teacher.id,
           teacherName: teacher.displayName,
           attachment: attachment || null,
+          deadlineAt: deadlineAt || null,
         };
         const comm = await pushClassCommunication(activeClassId, payload);
         await refreshClass();

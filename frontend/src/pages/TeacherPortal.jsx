@@ -11,6 +11,8 @@ import {
   RefreshCw,
   CheckCheck,
   Trash2,
+  Clock,
+  CalendarClock,
 } from 'lucide-react';
 import Logo from '../components/Logo';
 import { Button } from '../components/ui/button';
@@ -53,7 +55,19 @@ const TeacherPortal = () => {
   const [deviceCode, setDeviceCode] = useState('');
   const [studentName, setStudentName] = useState('');
   const [enrolling, setEnrolling] = useState(false);
+  const [hasDeadline, setHasDeadline] = useState(false);
+  const [deadline, setDeadline] = useState('');
   const fileRef = useRef(null);
+
+  const formatDeadline = (ts) =>
+    ts
+      ? new Date(ts).toLocaleString('fr-FR', {
+          day: 'numeric',
+          month: 'short',
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+      : '';
 
   const onFile = async (e) => {
     const file = e.target.files?.[0];
@@ -77,6 +91,12 @@ const TeacherPortal = () => {
     }
     try {
       const type = attachment?.type || COMM_TYPES.MESSAGE;
+      const deadlineAt =
+        hasDeadline && deadline ? new Date(deadline).getTime() : null;
+      if (hasDeadline && deadline && Number.isNaN(deadlineAt)) {
+        toast.error('Date d\'échéance invalide');
+        return;
+      }
       await sendToClass({
         title,
         body,
@@ -84,11 +104,14 @@ const TeacherPortal = () => {
         attachment: attachment
           ? { dataUrl: attachment.dataUrl, fileName: attachment.fileName, mimeType: attachment.mimeType }
           : null,
+        deadlineAt,
       });
       toast.success('Envoyé à la classe', { description: activeClassId });
       setTitle('');
       setBody('');
       setAttachment(null);
+      setHasDeadline(false);
+      setDeadline('');
     } catch (err) {
       toast.error(err.message || 'Envoi impossible');
     }
@@ -288,6 +311,34 @@ const TeacherPortal = () => {
               </button>
             </p>
           )}
+          <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 p-3 space-y-3">
+            <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+              <input
+                type="checkbox"
+                checked={hasDeadline}
+                onChange={(e) => setHasDeadline(e.target.checked)}
+                className="rounded border-neutral-300"
+              />
+              <CalendarClock className="w-4 h-4 text-jokko" />
+              Ajouter une échéance pour le travail
+            </label>
+            {hasDeadline && (
+              <div className="space-y-2">
+                <Label htmlFor="deadline">Date et heure limite</Label>
+                <Input
+                  id="deadline"
+                  type="datetime-local"
+                  value={deadline}
+                  onChange={(e) => setDeadline(e.target.value)}
+                  className={JOKKO.input}
+                  required={hasDeadline}
+                />
+                <p className={`text-xs ${JOKKO.muted}`}>
+                  L&apos;élève verra un compte à rebours : rouge (urgent), jaune, vert.
+                </p>
+              </div>
+            )}
+          </div>
           <Button type="submit" disabled={sending} className={`w-full gap-2 ${JOKKO.btnPrimary}`}>
             <Send className="w-4 h-4" />
             {sending ? 'Envoi…' : 'Envoyer aux élèves'}
@@ -323,6 +374,12 @@ const TeacherPortal = () => {
                         <p className={`text-sm ${JOKKO.muted} mt-1 line-clamp-2`}>{comm.body}</p>
                       )}
                       <p className={`text-xs ${JOKKO.muted} mt-2`}>{formatWhen(comm.createdAt)}</p>
+                      {comm.deadlineAt && (
+                        <p className="text-xs text-jokko mt-1 flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          Échéance : {formatDeadline(comm.deadlineAt)}
+                        </p>
+                      )}
                     </div>
                     <span className="text-xs shrink-0 px-2 py-1 rounded-full bg-jokko-50 dark:bg-jokko-950 text-jokko">
                       {readBy.length}/{total} lu{readBy.length > 1 ? 's' : ''}
