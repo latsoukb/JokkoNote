@@ -13,12 +13,22 @@ import {
   Trash2,
   Clock,
   CalendarClock,
+  Plus,
+  Pencil,
 } from 'lucide-react';
 import Logo from '../components/Logo';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '../components/ui/dialog';
 import { useTeacher } from '../context/TeacherContext';
 import { useTheme } from '../context/ThemeContext';
 import { COMM_TYPES, fileToAttachment, isSyncConfigured } from '../lib/classSync';
@@ -47,6 +57,10 @@ const TeacherPortal = () => {
     refreshClass,
     enrollStudent,
     removeStudent,
+    addClass,
+    editClass,
+    removeClass,
+    removeCommunication,
   } = useTeacher();
   const { theme, toggleTheme } = useTheme();
   const [title, setTitle] = useState('');
@@ -57,7 +71,16 @@ const TeacherPortal = () => {
   const [enrolling, setEnrolling] = useState(false);
   const [hasDeadline, setHasDeadline] = useState(false);
   const [deadline, setDeadline] = useState('');
+  const [recipientMode, setRecipientMode] = useState('all');
+  const [targetDeviceId, setTargetDeviceId] = useState('');
+  const [newClassId, setNewClassId] = useState('');
+  const [newClassName, setNewClassName] = useState('');
+  const [editClassName, setEditClassName] = useState('');
+  const [classDialogOpen, setClassDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const fileRef = useRef(null);
+
+  const activeClass = classes.find((c) => c.id === activeClassId);
 
   const formatDeadline = (ts) =>
     ts
@@ -97,6 +120,8 @@ const TeacherPortal = () => {
         toast.error('Date d\'échéance invalide');
         return;
       }
+      const targetDeviceIds =
+        recipientMode === 'one' && targetDeviceId ? [targetDeviceId] : null;
       await sendToClass({
         title,
         body,
@@ -105,8 +130,13 @@ const TeacherPortal = () => {
           ? { dataUrl: attachment.dataUrl, fileName: attachment.fileName, mimeType: attachment.mimeType }
           : null,
         deadlineAt,
+        targetDeviceIds,
       });
-      toast.success('Envoyé à la classe', { description: activeClassId });
+      const dest =
+        recipientMode === 'one'
+          ? classData.students.find((s) => s.deviceId === targetDeviceId)?.displayName || 'élève'
+          : 'toute la classe';
+      toast.success('Message envoyé', { description: dest });
       setTitle('');
       setBody('');
       setAttachment(null);
@@ -167,10 +197,73 @@ const TeacherPortal = () => {
         )}
 
         <section className={`${JOKKO.card} p-4 space-y-3`}>
-          <div className="flex items-center gap-2">
-            <Users className="w-5 h-5 text-jokko" />
-            <h2 className="font-semibold">Classe active</h2>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Users className="w-5 h-5 text-jokko" />
+              <h2 className="font-semibold">Mes classes</h2>
+            </div>
+            <Dialog open={classDialogOpen} onOpenChange={setClassDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1">
+                  <Plus className="w-4 h-4" />
+                  Nouvelle
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Créer une classe</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-3 py-2">
+                  <div className="space-y-1">
+                    <Label htmlFor="new-class-id">Code classe (ex. MATH-6A)</Label>
+                    <Input
+                      id="new-class-id"
+                      value={newClassId}
+                      onChange={(e) => setNewClassId(e.target.value.toUpperCase())}
+                      placeholder="MATH-6A"
+                      className={JOKKO.input}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="new-class-name">Nom affiché</Label>
+                    <Input
+                      id="new-class-name"
+                      value={newClassName}
+                      onChange={(e) => setNewClassName(e.target.value)}
+                      placeholder="Mathématiques 6ème A"
+                      className={JOKKO.input}
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button
+                    className={JOKKO.btnPrimary}
+                    onClick={async () => {
+                      try {
+                        await addClass({
+                          classId: newClassId.trim(),
+                          name: newClassName.trim() || newClassId.trim(),
+                        });
+                        toast.success('Classe créée');
+                        setNewClassId('');
+                        setNewClassName('');
+                        setClassDialogOpen(false);
+                      } catch (err) {
+                        toast.error(err.message || 'Erreur');
+                      }
+                    }}
+                  >
+                    Créer
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
+          {classes.length === 0 && (
+            <p className={`text-sm ${JOKKO.muted}`}>
+              Aucune classe — créez-en une pour commencer.
+            </p>
+          )}
           <div className="grid gap-2">
             {classes.map((c) => (
               <button
@@ -184,10 +277,73 @@ const TeacherPortal = () => {
                 }`}
               >
                 <p className="font-medium">{c.name}</p>
-                <p className={`text-xs ${JOKKO.muted}`}>{c.id}</p>
+                <p className={`text-xs ${JOKKO.muted}`}>
+                  {c.id} · {c.studentCount ?? 0} élève{(c.studentCount ?? 0) > 1 ? 's' : ''}
+                </p>
               </button>
             ))}
           </div>
+          {activeClassId && (
+            <div className="flex flex-wrap gap-2 pt-2 border-t border-neutral-200 dark:border-neutral-800">
+              <Dialog
+                open={editDialogOpen}
+                onOpenChange={(open) => {
+                  setEditDialogOpen(open);
+                  if (open) setEditClassName(activeClass?.name || activeClassId);
+                }}
+              >
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-1">
+                    <Pencil className="w-3.5 h-3.5" />
+                    Renommer
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Renommer la classe</DialogTitle>
+                  </DialogHeader>
+                  <Input
+                    value={editClassName}
+                    onChange={(e) => setEditClassName(e.target.value)}
+                    className={JOKKO.input}
+                  />
+                  <DialogFooter>
+                    <Button
+                      className={JOKKO.btnPrimary}
+                      onClick={async () => {
+                        try {
+                          await editClass(activeClassId, editClassName);
+                          toast.success('Classe mise à jour');
+                          setEditDialogOpen(false);
+                        } catch (err) {
+                          toast.error(err.message || 'Erreur');
+                        }
+                      }}
+                    >
+                      Enregistrer
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1 text-red-600"
+                onClick={async () => {
+                  if (!window.confirm(`Supprimer la classe ${activeClassId} ?`)) return;
+                  try {
+                    await removeClass(activeClassId);
+                    toast.success('Classe supprimée');
+                  } catch (err) {
+                    toast.error(err.message || 'Erreur');
+                  }
+                }}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Supprimer
+              </Button>
+            </div>
+          )}
         </section>
 
         <section className={`${JOKKO.card} p-4 sm:p-6 space-y-4`}>
@@ -269,8 +425,56 @@ const TeacherPortal = () => {
         <form onSubmit={submit} className={`${JOKKO.card} p-4 sm:p-6 space-y-4`}>
           <h2 className="font-semibold flex items-center gap-2">
             <Send className="w-5 h-5 text-jokko" />
-            Envoyer à {activeClassId}
+            Envoyer — {activeClass?.name || activeClassId || '…'}
           </h2>
+          {!activeClassId && (
+            <p className={`text-sm ${JOKKO.muted}`}>Créez ou sélectionnez une classe d&apos;abord.</p>
+          )}
+          {activeClassId && classData.students.length > 0 && (
+            <div className="space-y-2">
+              <Label>Destinataires</Label>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRecipientMode('all')}
+                  className={`px-3 py-1.5 text-sm rounded-lg border ${
+                    recipientMode === 'all'
+                      ? 'border-jokko bg-jokko-50 dark:bg-jokko-950'
+                      : 'border-neutral-200 dark:border-neutral-800'
+                  }`}
+                >
+                  Toute la classe
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRecipientMode('one')}
+                  className={`px-3 py-1.5 text-sm rounded-lg border ${
+                    recipientMode === 'one'
+                      ? 'border-jokko bg-jokko-50 dark:bg-jokko-950'
+                      : 'border-neutral-200 dark:border-neutral-800'
+                  }`}
+                >
+                  Un élève
+                </button>
+              </div>
+              {recipientMode === 'one' && (
+                <select
+                  value={targetDeviceId}
+                  onChange={(e) => setTargetDeviceId(e.target.value)}
+                  className={`w-full rounded-md border px-3 py-2 text-sm ${JOKKO.input}`}
+                  required
+                >
+                  <option value="">Choisir un élève…</option>
+                  {classData.students.map((s) => (
+                    <option key={s.deviceId} value={s.deviceId}>
+                      {s.displayName} (
+                      {s.deviceId.replace(/^dev-/, '').slice(0, 8).toUpperCase()})
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
           <div className="space-y-2">
             <Label htmlFor="title">Titre</Label>
             <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} className={JOKKO.input} />
@@ -339,9 +543,13 @@ const TeacherPortal = () => {
               </div>
             )}
           </div>
-          <Button type="submit" disabled={sending} className={`w-full gap-2 ${JOKKO.btnPrimary}`}>
+          <Button
+            type="submit"
+            disabled={sending || !activeClassId}
+            className={`w-full gap-2 ${JOKKO.btnPrimary}`}
+          >
             <Send className="w-4 h-4" />
-            {sending ? 'Envoi…' : 'Envoyer aux élèves'}
+            {sending ? 'Envoi…' : recipientMode === 'one' ? 'Envoyer à cet élève' : 'Envoyer à la classe'}
           </Button>
         </form>
 
@@ -361,7 +569,10 @@ const TeacherPortal = () => {
           <ul className="space-y-4">
             {classData.communications.map((comm) => {
               const readBy = comm.readBy || [];
-              const total = classData.students.length;
+              const targets = comm.targetDeviceIds;
+              const total = targets?.length
+                ? targets.length
+                : classData.students.length;
               return (
                 <li
                   key={comm.id}
@@ -370,6 +581,11 @@ const TeacherPortal = () => {
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="font-medium truncate">{comm.title || 'Sans titre'}</p>
+                      {targets?.length > 0 && (
+                        <p className="text-xs text-jokko mt-0.5">
+                          Privé · {targets.length} élève{targets.length > 1 ? 's' : ''}
+                        </p>
+                      )}
                       {comm.body && (
                         <p className={`text-sm ${JOKKO.muted} mt-1 line-clamp-2`}>{comm.body}</p>
                       )}
@@ -381,9 +597,27 @@ const TeacherPortal = () => {
                         </p>
                       )}
                     </div>
-                    <span className="text-xs shrink-0 px-2 py-1 rounded-full bg-jokko-50 dark:bg-jokko-950 text-jokko">
-                      {readBy.length}/{total} lu{readBy.length > 1 ? 's' : ''}
-                    </span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span className="text-xs px-2 py-1 rounded-full bg-jokko-50 dark:bg-jokko-950 text-jokko">
+                        {readBy.length}/{total} lu{readBy.length > 1 ? 's' : ''}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Supprimer le message"
+                        onClick={async () => {
+                          if (!window.confirm('Supprimer ce message ?')) return;
+                          try {
+                            await removeCommunication(comm.id);
+                            toast.success('Message supprimé');
+                          } catch {
+                            toast.error('Suppression impossible');
+                          }
+                        }}
+                      >
+                        <Trash2 className="w-4 h-4 text-red-500" />
+                      </Button>
+                    </div>
                   </div>
                   {readBy.length > 0 ? (
                     <ul className="mt-3 space-y-1 border-t border-neutral-200 dark:border-neutral-800 pt-3">

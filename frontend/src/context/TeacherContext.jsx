@@ -6,14 +6,20 @@ import React, {
   useMemo,
   useState,
 } from 'react';
-import { DEMO_CLASSES, DEMO_TEACHERS } from '../mock/teachers';
 import {
   COMM_TYPES,
+  createClass,
+  deleteClassApi,
+  deleteCommunication,
   enrollStudent,
   fetchClassDetails,
+  fetchTeacherClasses,
   isSyncConfigured,
+  loginTeacher,
   pushClassCommunication,
+  registerTeacher,
   removeStudent,
+  updateClass,
 } from '../lib/classSync';
 
 const SESSION_KEY = 'jokko-teacher-session';
@@ -29,30 +35,64 @@ export const TeacherProvider = ({ children }) => {
       return null;
     }
   });
-  const [activeClassId, setActiveClassId] = useState(DEMO_CLASSES[0]?.id || 'MATH-6A');
-  const [classData, setClassData] = useState({ students: [], communications: [] });
+  const [classes, setClasses] = useState([]);
+  const [activeClassId, setActiveClassId] = useState('');
+  const [classData, setClassData] = useState({ students: [], communications: [], name: '' });
   const [loadingClass, setLoadingClass] = useState(false);
   const [sending, setSending] = useState(false);
 
-  const login = useCallback((loginName, password) => {
-    const found = DEMO_TEACHERS.find(
-      (t) => t.login === loginName.trim() && t.password === password,
-    );
-    if (!found) return false;
-    setTeacher(found);
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify(found));
-    return true;
+  const persistTeacher = useCallback((t) => {
+    setTeacher(t);
+    if (t) sessionStorage.setItem(SESSION_KEY, JSON.stringify(t));
+    else sessionStorage.removeItem(SESSION_KEY);
   }, []);
 
+  const loadClasses = useCallback(async () => {
+    if (!teacher?.id || !isSyncConfigured()) {
+      setClasses([]);
+      return;
+    }
+    const list = await fetchTeacherClasses(teacher.id);
+    setClasses(list);
+    setActiveClassId((prev) => {
+      if (prev && list.some((c) => c.id === prev)) return prev;
+      return list[0]?.id || '';
+    });
+  }, [teacher?.id]);
+
+  useEffect(() => {
+    if (teacher) loadClasses();
+    else setClasses([]);
+  }, [teacher, loadClasses]);
+
+  const register = useCallback(
+    async (login, password, displayName) => {
+      const t = await registerTeacher(login, password, displayName);
+      persistTeacher(t);
+      return t;
+    },
+    [persistTeacher],
+  );
+
+  const login = useCallback(
+    async (loginName, password) => {
+      const t = await loginTeacher(loginName, password);
+      persistTeacher(t);
+      return t;
+    },
+    [persistTeacher],
+  );
+
   const logout = useCallback(() => {
-    setTeacher(null);
-    sessionStorage.removeItem(SESSION_KEY);
-    setClassData({ students: [], communications: [] });
-  }, []);
+    persistTeacher(null);
+    setClasses([]);
+    setActiveClassId('');
+    setClassData({ students: [], communications: [], name: '' });
+  }, [persistTeacher]);
 
   const refreshClass = useCallback(async () => {
     if (!activeClassId || !isSyncConfigured()) {
-      setClassData({ students: [], communications: [] });
+      setClassData({ students: [], communications: [], name: '' });
       return;
     }
     setLoadingClass(true);
@@ -61,17 +101,48 @@ export const TeacherProvider = ({ children }) => {
       setClassData({
         students: data.students || [],
         communications: data.communications || [],
+        name: data.name || activeClassId,
       });
     } catch {
-      setClassData({ students: [], communications: [] });
+      setClassData({ students: [], communications: [], name: '' });
     } finally {
       setLoadingClass(false);
     }
   }, [activeClassId]);
 
   useEffect(() => {
-    if (teacher) refreshClass();
-  }, [teacher, refreshClass]);
+    if (teacher && activeClassId) refreshClass();
+  }, [teacher, activeClassId, refreshClass]);
+
+  const addClass = useCallback(
+    async ({ classId, name }) => {
+      if (!teacher) throw new Error('Non connecté');
+      const created = await createClass(teacher.id, { classId, name });
+      await loadClasses();
+      setActiveClassId(created.id);
+      return created;
+    },
+    [teacher, loadClasses],
+  );
+
+  const editClass = useCallback(
+    async (classId, name) => {
+      if (!teacher) throw new Error('Non connecté');
+      await updateClass(classId, { name, teacherId: teacher.id });
+      await loadClasses();
+      if (classId === activeClassId) await refreshClass();
+    },
+    [teacher, activeClassId, loadClasses, refreshClass],
+  );
+
+  const removeClass = useCallback(
+    async (classId) => {
+      if (!teacher) throw new Error('Non connecté');
+      await deleteClassApi(classId, teacher.id);
+      await loadClasses();
+    },
+    [teacher, loadClasses],
+  );
 
   const enroll = useCallback(
     async (deviceId, displayName) => {
@@ -90,7 +161,7 @@ export const TeacherProvider = ({ children }) => {
   );
 
   const sendToClass = useCallback(
-    async ({ title, body, type, attachment, deadlineAt }) => {
+    async ({ title, body, type, attachment, deadlineAt, targetDeviceIds }) => {
       if (!teacher || !activeClassId) throw new Error('Non connecté');
       if (!isSyncConfigured()) throw new Error('Serveur sync non configuré');
       setSending(true);
@@ -103,6 +174,7 @@ export const TeacherProvider = ({ children }) => {
           teacherName: teacher.displayName,
           attachment: attachment || null,
           deadlineAt: deadlineAt || null,
+          targetDeviceIds: targetDeviceIds?.length ? targetDeviceIds : null,
         };
         const comm = await pushClassCommunication(activeClassId, payload);
         await refreshClass();
@@ -114,14 +186,23 @@ export const TeacherProvider = ({ children }) => {
     [teacher, activeClassId, refreshClass],
   );
 
+  const removeCommunication = useCallback(
+    async (commId) => {
+      await deleteCommunication(activeClassId, commId);
+      await refreshClass();
+    },
+    [activeClassId, refreshClass],
+  );
+
   const value = useMemo(
     () => ({
       teacher,
-      classes: DEMO_CLASSES,
+      classes,
       activeClassId,
       setActiveClassId,
       classData,
       loadingClass,
+      register,
       login,
       logout,
       sendToClass,
@@ -129,13 +210,20 @@ export const TeacherProvider = ({ children }) => {
       refreshClass,
       enrollStudent: enroll,
       removeStudent: unenroll,
+      addClass,
+      editClass,
+      removeClass,
+      removeCommunication,
+      loadClasses,
       syncConfigured: isSyncConfigured(),
     }),
     [
       teacher,
+      classes,
       activeClassId,
       classData,
       loadingClass,
+      register,
       login,
       logout,
       sendToClass,
@@ -143,6 +231,11 @@ export const TeacherProvider = ({ children }) => {
       refreshClass,
       enroll,
       unenroll,
+      addClass,
+      editClass,
+      removeClass,
+      removeCommunication,
+      loadClasses,
     ],
   );
 

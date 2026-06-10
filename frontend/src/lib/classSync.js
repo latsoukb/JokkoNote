@@ -35,6 +35,80 @@ export const normalizeDeviceId = (input) => {
   return `dev-${raw.toUpperCase()}`;
 };
 
+export const registerTeacher = async (login, password, displayName) => {
+  const base = syncBase();
+  if (!base) throw new Error('Sync non configuré');
+  const res = await fetch(`${base}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ login, password, displayName }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Inscription impossible');
+  return data.teacher;
+};
+
+export const loginTeacher = async (login, password) => {
+  const base = syncBase();
+  if (!base) throw new Error('Sync non configuré');
+  const res = await fetch(`${base}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ login, password }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Connexion impossible');
+  return data.teacher;
+};
+
+export const fetchTeacherClasses = async (teacherId) => {
+  const base = syncBase();
+  if (!base) return [];
+  const res = await fetch(`${base}/teachers/${encodeURIComponent(teacherId)}/classes`);
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.classes || [];
+};
+
+export const createClass = async (teacherId, { classId, name }) => {
+  const base = syncBase();
+  if (!base) throw new Error('Sync non configuré');
+  const res = await fetch(`${base}/classes`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ classId, name, teacherId }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Création impossible');
+  return data.class;
+};
+
+export const updateClass = async (classId, { name, teacherId }) => {
+  const base = syncBase();
+  if (!base) throw new Error('Sync non configuré');
+  const res = await fetch(`${base}/classes/${encodeURIComponent(classId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, teacherId }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Modification impossible');
+  return data.class;
+};
+
+export const deleteClassApi = async (classId, teacherId) => {
+  const base = syncBase();
+  if (!base) throw new Error('Sync non configuré');
+  const res = await fetch(`${base}/classes/${encodeURIComponent(classId)}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ teacherId }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Suppression impossible');
+  return data;
+};
+
 export const fetchClassDetails = async (classId) => {
   const base = syncBase();
   if (!base) throw new Error('Sync non configuré');
@@ -73,6 +147,17 @@ export const pushClassCommunication = async (classId, payload) => {
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error('Envoi impossible');
+  return res.json();
+};
+
+export const deleteCommunication = async (classId, commId) => {
+  const base = syncBase();
+  if (!base) throw new Error('Sync non configuré');
+  const res = await fetch(
+    `${base}/classes/${encodeURIComponent(classId)}/communications/${encodeURIComponent(commId)}`,
+    { method: 'DELETE' },
+  );
+  if (!res.ok) throw new Error('Suppression impossible');
   return res.json();
 };
 

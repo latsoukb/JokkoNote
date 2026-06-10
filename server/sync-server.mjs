@@ -1,6 +1,23 @@
 #!/usr/bin/env node
 import http from 'node:http';
-import { emptyClass, listClassIds, readClass, storageMode, writeClass } from './store.mjs';
+import {
+  deleteClass,
+  emptyClass,
+  listClassIds,
+  readClass,
+  storageMode,
+  writeClass,
+} from './store.mjs';
+import {
+  createTeacherRecord,
+  findTeacherByLogin,
+  publicTeacher,
+  saveTeacher,
+  seedDemoTeacherIfEmpty,
+  verifyTeacherPassword,
+} from './teachers.mjs';
+
+await seedDemoTeacherIfEmpty();
 
 const PORT = Number(process.env.PORT || 8787);
 
@@ -12,7 +29,7 @@ const readBody = async (req) => {
 
 const cors = (res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 };
 
@@ -53,6 +70,12 @@ const liteComm = (comm, classId) => ({
     : null,
 });
 
+const commVisibleToDevice = (comm, deviceId) => {
+  const targets = comm.targetDeviceIds;
+  if (!targets?.length) return true;
+  return targets.some((t) => deviceIdsMatch(deviceId, t));
+};
+
 const findClassesForDevice = async (deviceId) => {
   const matches = [];
   const ids = await listClassIds();
@@ -90,6 +113,7 @@ const server = http.createServer(async (req, res) => {
       for (const classId of classIds) {
         const store = await readClass(classId);
         for (const comm of store.communications || []) {
+          if (!commVisibleToDevice(comm, deviceId)) continue;
           communications.push(lite ? liteComm(comm, classId) : { ...comm, classId });
         }
       }
@@ -98,9 +122,107 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (parts[0] === 'auth' && parts[1] === 'register' && req.method === 'POST') {
+      const { login, password, displayName } = await readBody(req);
+      if (!login?.trim() || !password || password.length < 6) {
+        send(res, 400, { error: 'Identifiant et mot de passe (6 car. min.) requis' });
+        return;
+      }
+      if (await findTeacherByLogin(login)) {
+        send(res, 409, { error: 'Identifiant déjà utilisé' });
+        return;
+      }
+      const teacher = createTeacherRecord(login, password, displayName);
+      await saveTeacher(teacher);
+      send(res, 201, { teacher: publicTeacher(teacher) });
+      return;
+    }
+
+    if (parts[0] === 'auth' && parts[1] === 'login' && req.method === 'POST') {
+      const { login, password } = await readBody(req);
+      const teacher = await findTeacherByLogin(login);
+      if (!teacher || !verifyTeacherPassword(teacher, password)) {
+        send(res, 401, { error: 'Identifiants incorrects' });
+        return;
+      }
+      send(res, 200, { teacher: publicTeacher(teacher) });
+      return;
+    }
+
+    if (parts[0] === 'teachers' && parts[2] === 'classes' && req.method === 'GET') {
+      const teacherId = decodeURIComponent(parts[1]);
+      const ids = await listClassIds();
+      const classes = [];
+      for (const id of ids) {
+        const store = await readClass(id);
+        if (store.teacherId === teacherId) {
+          classes.push({
+            id: store.classId,
+            name: store.name || store.classId,
+            studentCount: store.students?.length || 0,
+          });
+        }
+      }
+      classes.sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+      send(res, 200, { classes });
+      return;
+    }
+
+    if (parts[0] === 'classes' && parts.length === 1 && req.method === 'POST') {
+      const { classId, name, teacherId } = await readBody(req);
+      const rawId = (classId || `CLS-${Date.now().toString(36).toUpperCase()}`)
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9-]/g, '');
+      if (!rawId || !teacherId) {
+        send(res, 400, { error: 'classId et teacherId requis' });
+        return;
+      }
+      const ids = await listClassIds();
+      if (ids.includes(rawId)) {
+        send(res, 409, { error: 'Cette classe existe déjà' });
+        return;
+      }
+      const store = {
+        ...emptyClass(rawId),
+        name: (name || rawId).trim(),
+        teacherId,
+      };
+      await writeClass(rawId, store);
+      send(res, 201, { class: { id: store.classId, name: store.name } });
+      return;
+    }
+
     if (parts[0] === 'classes' && parts.length === 2 && req.method === 'GET') {
       const classId = decodeURIComponent(parts[1]);
       send(res, 200, await readClass(classId));
+      return;
+    }
+
+    if (parts[0] === 'classes' && parts.length === 2 && req.method === 'PATCH') {
+      const classId = decodeURIComponent(parts[1]);
+      const { name, teacherId } = await readBody(req);
+      const store = await readClass(classId);
+      if (teacherId && store.teacherId && store.teacherId !== teacherId) {
+        send(res, 403, { error: 'Non autorisé' });
+        return;
+      }
+      if (name?.trim()) store.name = name.trim();
+      await writeClass(classId, store);
+      send(res, 200, { class: { id: store.classId, name: store.name } });
+      return;
+    }
+
+    if (parts[0] === 'classes' && parts.length === 2 && req.method === 'DELETE') {
+      const classId = decodeURIComponent(parts[1]);
+      const { teacherId } = await readBody(req);
+      const store = await readClass(classId);
+      if (teacherId && store.teacherId && store.teacherId !== teacherId) {
+        send(res, 403, { error: 'Non autorisé' });
+        return;
+      }
+      await deleteClass(classId);
+      send(res, 200, { ok: true });
       return;
     }
 
@@ -143,6 +265,26 @@ const server = http.createServer(async (req, res) => {
       parts[0] === 'classes' &&
       parts[2] === 'communications' &&
       parts.length === 4 &&
+      req.method === 'DELETE'
+    ) {
+      const classId = decodeURIComponent(parts[1]);
+      const commId = decodeURIComponent(parts[3]);
+      const store = await readClass(classId);
+      const before = store.communications.length;
+      store.communications = store.communications.filter((c) => c.id !== commId);
+      if (store.communications.length === before) {
+        send(res, 404, { error: 'Message introuvable' });
+        return;
+      }
+      await writeClass(classId, store);
+      send(res, 200, { ok: true });
+      return;
+    }
+
+    if (
+      parts[0] === 'classes' &&
+      parts[2] === 'communications' &&
+      parts.length === 4 &&
       req.method === 'GET'
     ) {
       const classId = decodeURIComponent(parts[1]);
@@ -167,11 +309,15 @@ const server = http.createServer(async (req, res) => {
       if (req.method === 'POST') {
         const payload = await readBody(req);
         const store = await readClass(classId);
+        const targets = Array.isArray(payload.targetDeviceIds)
+          ? payload.targetDeviceIds.map(normalizeDeviceId).filter(Boolean)
+          : null;
         const comm = {
           id: `comm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           createdAt: Date.now(),
           readBy: [],
           ...payload,
+          targetDeviceIds: targets?.length ? targets : null,
         };
         store.communications.unshift(comm);
         await writeClass(classId, store);

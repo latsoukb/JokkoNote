@@ -16,6 +16,8 @@ const classFile = (classId) => path.join(DATA_DIR, `${classId.toUpperCase()}.jso
 
 export const emptyClass = (classId) => ({
   classId: classId.toUpperCase(),
+  name: classId.toUpperCase(),
+  teacherId: null,
   communications: [],
   students: [],
 });
@@ -90,3 +92,20 @@ export const writeClass = (classId, data) =>
 
 export const listClassIds = () =>
   storageMode === 'supabase' ? listClassIdsSupabase() : Promise.resolve(listClassIdsFile());
+
+const deleteClassFile = (classId) => {
+  const file = classFile(classId);
+  if (fs.existsSync(file)) fs.unlinkSync(file);
+};
+
+const deleteClassSupabase = async (classId) => {
+  const id = classId.toUpperCase();
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/jokko_classes?class_id=eq.${encodeURIComponent(id)}`,
+    { method: 'DELETE', headers: sbHeaders() },
+  );
+  if (!res.ok) throw new Error(`Supabase delete failed (${res.status})`);
+};
+
+export const deleteClass = (classId) =>
+  storageMode === 'supabase' ? deleteClassSupabase(classId) : deleteClassFile(classId);
