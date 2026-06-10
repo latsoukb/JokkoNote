@@ -14,6 +14,7 @@ import {
   publicTeacher,
   saveTeacher,
   seedDemoTeacherIfEmpty,
+  teachersStorageMode,
   verifyTeacherPassword,
 } from './teachers.mjs';
 
@@ -124,7 +125,13 @@ const server = http.createServer(async (req, res) => {
     const parts = url.pathname.split('/').filter(Boolean);
 
     if (req.method === 'GET' && url.pathname === '/health') {
-      send(res, 200, { ok: true, storage: storageMode, auth: true, version: SERVER_VERSION });
+      send(res, 200, {
+        ok: true,
+        storage: storageMode,
+        teachers: teachersStorageMode(),
+        auth: true,
+        version: SERVER_VERSION,
+      });
       return;
     }
 

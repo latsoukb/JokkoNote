@@ -5,6 +5,19 @@
 - Repo GitHub : https://github.com/latsoukb/JokkoNote
 - Pages prof : https://latsoukb.github.io/JokkoNote/ (si workflow vert)
 
+## Étape A0 — Table profs Supabase (si connexion / création compte échoue)
+
+Si JokkoNote affiche *« Table jokko_teachers absente »* ou *« Identifiants incorrects »* avec `diop` / `jokko2026` :
+
+1. Ouvre ton projet **Supabase** → **SQL Editor**
+2. Colle le contenu de `server/supabase-migration-teachers.sql` du repo
+3. Clique **Run**
+4. Redémarre le service **jokko-sync** sur Render (ou attends le prochain déploiement)
+
+Vérification : `https://TON-URL-RENDER/health` doit afficher `"teachers":"supabase"`.
+
+---
+
 ## Étape A — Serveur sync (1 clic Render)
 
 1. Ouvre : **https://dashboard.render.com/blueprint/new?repo=https://github.com/latsoukb/JokkoNote**
