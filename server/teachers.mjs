@@ -68,7 +68,14 @@ const readTeachersSupabase = async () => {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/jokko_teachers?select=*`, {
     headers: sbHeaders(),
   });
-  if (!res.ok) throw new Error(`Supabase teachers read (${res.status})`);
+  if (res.status === 404) {
+    console.warn('Table jokko_teachers absente — exécutez server/supabase-schema.sql');
+    return [];
+  }
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(`Supabase teachers read (${res.status}) ${detail}`.trim());
+  }
   return (await res.json()).map(normalizeTeacher);
 };
 
@@ -85,7 +92,13 @@ const writeTeacherSupabase = async (teacher) => {
       created_at: new Date(teacher.createdAt).toISOString(),
     }),
   });
-  if (!res.ok) throw new Error(`Supabase teacher write (${res.status})`);
+  if (res.status === 404) {
+    throw new Error('Table jokko_teachers absente — exécutez server/supabase-schema.sql dans Supabase');
+  }
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(`Supabase teacher write (${res.status}) ${detail}`.trim());
+  }
 };
 
 export const listTeachers = () =>

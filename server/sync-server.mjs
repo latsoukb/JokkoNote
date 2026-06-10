@@ -17,7 +17,13 @@ import {
   verifyTeacherPassword,
 } from './teachers.mjs';
 
-await seedDemoTeacherIfEmpty();
+const SERVER_VERSION = 2;
+
+try {
+  await seedDemoTeacherIfEmpty();
+} catch (err) {
+  console.error('Seed prof démo ignoré:', err.message);
+}
 
 const PORT = Number(process.env.PORT || 8787);
 
@@ -118,7 +124,7 @@ const server = http.createServer(async (req, res) => {
     const parts = url.pathname.split('/').filter(Boolean);
 
     if (req.method === 'GET' && url.pathname === '/health') {
-      send(res, 200, { ok: true, storage: storageMode });
+      send(res, 200, { ok: true, storage: storageMode, auth: true, version: SERVER_VERSION });
       return;
     }
 

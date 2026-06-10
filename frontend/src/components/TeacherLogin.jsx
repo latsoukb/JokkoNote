@@ -12,11 +12,19 @@ const TeacherLogin = () => {
   const { login, register, syncConfigured } = useTeacher();
   const { theme, toggleTheme } = useTheme();
   const [mode, setMode] = useState('login');
-  const [user, setUser] = useState('');
-  const [pass, setPass] = useState('');
+  const [loginUser, setLoginUser] = useState('');
+  const [loginPass, setLoginPass] = useState('');
+  const [registerUser, setRegisterUser] = useState('');
+  const [registerPass, setRegisterPass] = useState('');
+  const [registerPassConfirm, setRegisterPassConfirm] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const switchMode = (next) => {
+    setMode(next);
+    setError('');
+  };
 
   const submit = async (e) => {
     e.preventDefault();
@@ -24,13 +32,17 @@ const TeacherLogin = () => {
     setLoading(true);
     try {
       if (mode === 'register') {
-        if (pass.length < 6) {
+        if (registerPass.length < 6) {
           setError('Mot de passe : 6 caractères minimum');
           return;
         }
-        await register(user, pass, displayName || user);
+        if (registerPass !== registerPassConfirm) {
+          setError('Les mots de passe ne correspondent pas');
+          return;
+        }
+        await register(registerUser, registerPass, displayName || registerUser);
       } else {
-        await login(user, pass);
+        await login(loginUser, loginPass);
       }
     } catch (err) {
       setError(err.message || 'Erreur');
@@ -61,7 +73,7 @@ const TeacherLogin = () => {
         <div className="flex gap-1 mb-4 p-1 rounded-lg bg-neutral-100 dark:bg-neutral-900">
           <button
             type="button"
-            onClick={() => { setMode('login'); setError(''); }}
+            onClick={() => switchMode('login')}
             className={`flex-1 py-2 text-sm rounded-md transition-colors ${
               mode === 'login' ? 'bg-white dark:bg-neutral-800 font-medium shadow-sm' : ''
             }`}
@@ -70,7 +82,7 @@ const TeacherLogin = () => {
           </button>
           <button
             type="button"
-            onClick={() => { setMode('register'); setError(''); }}
+            onClick={() => switchMode('register')}
             className={`flex-1 py-2 text-sm rounded-md transition-colors ${
               mode === 'register' ? 'bg-white dark:bg-neutral-800 font-medium shadow-sm' : ''
             }`}
@@ -96,10 +108,15 @@ const TeacherLogin = () => {
             <Label htmlFor="login">Identifiant</Label>
             <Input
               id="login"
-              value={user}
-              onChange={(e) => setUser(e.target.value)}
+              value={mode === 'register' ? registerUser : loginUser}
+              onChange={(e) =>
+                mode === 'register'
+                  ? setRegisterUser(e.target.value)
+                  : setLoginUser(e.target.value)
+              }
               className={JOKKO.input}
               required
+              autoComplete={mode === 'register' ? 'username' : 'username'}
             />
           </div>
           <div className="space-y-1">
@@ -107,13 +124,33 @@ const TeacherLogin = () => {
             <Input
               id="pass"
               type="password"
-              value={pass}
-              onChange={(e) => setPass(e.target.value)}
+              value={mode === 'register' ? registerPass : loginPass}
+              onChange={(e) =>
+                mode === 'register'
+                  ? setRegisterPass(e.target.value)
+                  : setLoginPass(e.target.value)
+              }
               className={JOKKO.input}
               required
               minLength={mode === 'register' ? 6 : 1}
+              autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
             />
           </div>
+          {mode === 'register' && (
+            <div className="space-y-1">
+              <Label htmlFor="passConfirm">Confirmer le mot de passe</Label>
+              <Input
+                id="passConfirm"
+                type="password"
+                value={registerPassConfirm}
+                onChange={(e) => setRegisterPassConfirm(e.target.value)}
+                className={JOKKO.input}
+                required
+                minLength={6}
+                autoComplete="new-password"
+              />
+            </div>
+          )}
         </div>
         {!syncConfigured && (
           <p className="text-xs text-amber-600 mb-3">Serveur sync non configuré.</p>

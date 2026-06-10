@@ -79,6 +79,13 @@ export const normalizeDeviceId = (input) => {
   return `dev-${raw.toUpperCase()}`;
 };
 
+const authApiError = (res, data, fallback) => {
+  if (res.status === 404) {
+    return 'Authentification indisponible — le serveur sync doit être mis à jour (Render).';
+  }
+  return data.error || fallback;
+};
+
 export const registerTeacher = async (login, password, displayName) => {
   const base = syncBase();
   if (!base) throw new Error('Sync non configuré');
@@ -88,7 +95,7 @@ export const registerTeacher = async (login, password, displayName) => {
     body: JSON.stringify({ login, password, displayName }),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || 'Inscription impossible');
+  if (!res.ok) throw new Error(authApiError(res, data, 'Inscription impossible'));
   return data.teacher;
 };
 
@@ -101,7 +108,7 @@ export const loginTeacher = async (login, password) => {
     body: JSON.stringify({ login, password }),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || 'Connexion impossible');
+  if (!res.ok) throw new Error(authApiError(res, data, 'Connexion impossible'));
   return data.teacher;
 };
 
