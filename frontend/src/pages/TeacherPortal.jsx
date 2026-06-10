@@ -31,7 +31,7 @@ import {
 } from '../components/ui/dialog';
 import { useTeacher } from '../context/TeacherContext';
 import { useTheme } from '../context/ThemeContext';
-import { COMM_TYPES, fileToAttachment, isSyncConfigured } from '../lib/classSync';
+import { COMM_TYPES, filesToAttachments, isSyncConfigured } from '../lib/classSync';
 import { JOKKO } from '../lib/jokkoTheme';
 import { toast } from 'sonner';
 
@@ -65,7 +65,7 @@ const TeacherPortal = () => {
   const { theme, toggleTheme } = useTheme();
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
-  const [attachment, setAttachment] = useState(null);
+  const [attachments, setAttachments] = useState([]);
   const [deviceCode, setDeviceCode] = useState('');
   const [studentName, setStudentName] = useState('');
   const [enrolling, setEnrolling] = useState(false);
@@ -92,28 +92,35 @@ const TeacherPortal = () => {
         })
       : '';
 
-  const onFile = async (e) => {
-    const file = e.target.files?.[0];
+  const onFiles = async (e) => {
+    const { files } = e.target;
     e.target.value = '';
-    if (!file) return;
+    if (!files?.length) return;
     try {
-      const att = await fileToAttachment(file);
-      setAttachment(att);
-      if (!title) setTitle(file.name.replace(/\.[^.]+$/, ''));
-      toast.success('Fichier prêt à envoyer', { description: file.name });
+      const added = await filesToAttachments(files);
+      setAttachments((prev) => [...prev, ...added]);
+      if (!title && added.length === 1) {
+        setTitle(added[0].fileName.replace(/\.[^.]+$/, ''));
+      }
+      toast.success(
+        added.length === 1 ? 'Fichier ajouté' : `${added.length} fichiers ajoutés`,
+      );
     } catch {
       toast.error('Fichier non supporté');
     }
   };
 
+  const removeAttachment = (index) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const submit = async (e) => {
     e.preventDefault();
-    if (!title.trim() && !body.trim() && !attachment) {
+    if (!title.trim() && !body.trim() && !attachments.length) {
       toast.error('Ajoutez un titre, un message ou un fichier');
       return;
     }
     try {
-      const type = attachment?.type || COMM_TYPES.MESSAGE;
       const deadlineAt =
         hasDeadline && deadline ? new Date(deadline).getTime() : null;
       if (hasDeadline && deadline && Number.isNaN(deadlineAt)) {
@@ -125,10 +132,7 @@ const TeacherPortal = () => {
       await sendToClass({
         title,
         body,
-        type,
-        attachment: attachment
-          ? { dataUrl: attachment.dataUrl, fileName: attachment.fileName, mimeType: attachment.mimeType }
-          : null,
+        attachments,
         deadlineAt,
         targetDeviceIds,
       });
@@ -139,7 +143,7 @@ const TeacherPortal = () => {
       toast.success('Message envoyé', { description: dest });
       setTitle('');
       setBody('');
-      setAttachment(null);
+      setAttachments([]);
       setHasDeadline(false);
       setDeadline('');
     } catch (err) {
@@ -494,26 +498,49 @@ const TeacherPortal = () => {
             ref={fileRef}
             type="file"
             accept="application/pdf,image/*"
+            multiple
             className="hidden"
-            onChange={onFile}
+            onChange={onFiles}
           />
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" onClick={() => fileRef.current?.click()} className="gap-2">
-              <FileText className="w-4 h-4" />
-              PDF
-            </Button>
-            <Button type="button" variant="outline" onClick={() => fileRef.current?.click()} className="gap-2">
-              <ImageIcon className="w-4 h-4" />
-              Image
-            </Button>
-          </div>
-          {attachment && (
-            <p className="text-sm text-jokko">
-              Pièce jointe : {attachment.fileName}
-              <button type="button" className="ml-2 underline" onClick={() => setAttachment(null)}>
-                Retirer
-              </button>
-            </p>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => fileRef.current?.click()}
+            className="gap-2"
+          >
+            <FileText className="w-4 h-4" />
+            <ImageIcon className="w-4 h-4" />
+            Ajouter des fichiers
+          </Button>
+          {attachments.length > 0 && (
+            <ul className="space-y-2 rounded-xl border border-neutral-200 dark:border-neutral-800 p-3">
+              {attachments.map((att, idx) => (
+                <li
+                  key={`${att.fileName}-${idx}`}
+                  className="flex items-center justify-between gap-2 text-sm"
+                >
+                  <span className="truncate min-w-0">
+                    {att.type === COMM_TYPES.PDF ? (
+                      <FileText className="w-3.5 h-3.5 inline mr-1 text-jokko" />
+                    ) : (
+                      <ImageIcon className="w-3.5 h-3.5 inline mr-1 text-jokko" />
+                    )}
+                    {att.fileName}
+                  </span>
+                  <button
+                    type="button"
+                    className="text-xs underline shrink-0"
+                    onClick={() => removeAttachment(idx)}
+                  >
+                    Retirer
+                  </button>
+                </li>
+              ))}
+              <p className="text-xs text-slate-500 pt-1">
+                {attachments.length} fichier{attachments.length > 1 ? 's' : ''} — vous pouvez en ajouter
+                d&apos;autres
+              </p>
+            </ul>
           )}
           <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 p-3 space-y-3">
             <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
@@ -570,6 +597,8 @@ const TeacherPortal = () => {
             {classData.communications.map((comm) => {
               const readBy = comm.readBy || [];
               const targets = comm.targetDeviceIds;
+              const fileCount =
+                comm.attachments?.length || (comm.attachment?.fileName ? 1 : 0);
               const total = targets?.length
                 ? targets.length
                 : classData.students.length;
@@ -581,6 +610,9 @@ const TeacherPortal = () => {
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="font-medium truncate">{comm.title || 'Sans titre'}</p>
+                      {fileCount > 1 && (
+                        <p className="text-xs text-jokko mt-0.5">{fileCount} fichiers</p>
+                      )}
                       {targets?.length > 0 && (
                         <p className="text-xs text-jokko mt-0.5">
                           Privé · {targets.length} élève{targets.length > 1 ? 's' : ''}

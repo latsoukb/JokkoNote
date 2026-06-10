@@ -7,7 +7,7 @@ import React, {
   useState,
 } from 'react';
 import {
-  COMM_TYPES,
+  buildCommPayload,
   createClass,
   deleteClassApi,
   deleteCommunication,
@@ -161,21 +161,20 @@ export const TeacherProvider = ({ children }) => {
   );
 
   const sendToClass = useCallback(
-    async ({ title, body, type, attachment, deadlineAt, targetDeviceIds }) => {
+    async ({ title, body, attachments, deadlineAt, targetDeviceIds }) => {
       if (!teacher || !activeClassId) throw new Error('Non connecté');
       if (!isSyncConfigured()) throw new Error('Serveur sync non configuré');
       setSending(true);
       try {
-        const payload = {
-          type: type || COMM_TYPES.MESSAGE,
-          title: title?.trim() || 'Sans titre',
-          body: body?.trim() || '',
+        const payload = buildCommPayload({
+          title,
+          body,
+          attachments,
           teacherId: teacher.id,
           teacherName: teacher.displayName,
-          attachment: attachment || null,
-          deadlineAt: deadlineAt || null,
-          targetDeviceIds: targetDeviceIds?.length ? targetDeviceIds : null,
-        };
+          deadlineAt,
+          targetDeviceIds,
+        });
         const comm = await pushClassCommunication(activeClassId, payload);
         await refreshClass();
         return comm;

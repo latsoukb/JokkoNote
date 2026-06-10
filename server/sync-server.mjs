@@ -58,17 +58,34 @@ const normalizeDeviceId = (input) => {
   return `dev-${raw.toUpperCase()}`;
 };
 
-const liteComm = (comm, classId) => ({
-  ...comm,
-  classId,
-  attachment: comm.attachment
+const liteAttachment = (att) =>
+  att
     ? {
-        fileName: comm.attachment.fileName,
-        mimeType: comm.attachment.mimeType,
-        hasData: Boolean(comm.attachment.dataUrl),
+        type: att.type,
+        fileName: att.fileName,
+        mimeType: att.mimeType,
+        hasData: Boolean(att.dataUrl),
       }
-    : null,
-});
+    : null;
+
+const normalizeCommAttachments = (comm) => {
+  const list = Array.isArray(comm.attachments) && comm.attachments.length
+    ? comm.attachments
+    : comm.attachment
+      ? [comm.attachment]
+      : [];
+  return list;
+};
+
+const liteComm = (comm, classId) => {
+  const attachments = normalizeCommAttachments(comm).map(liteAttachment);
+  return {
+    ...comm,
+    classId,
+    attachments,
+    attachment: attachments[0] || null,
+  };
+};
 
 const commVisibleToDevice = (comm, deviceId) => {
   const targets = comm.targetDeviceIds;
@@ -312,11 +329,18 @@ const server = http.createServer(async (req, res) => {
         const targets = Array.isArray(payload.targetDeviceIds)
           ? payload.targetDeviceIds.map(normalizeDeviceId).filter(Boolean)
           : null;
+        const attachments = Array.isArray(payload.attachments) && payload.attachments.length
+          ? payload.attachments
+          : payload.attachment
+            ? [payload.attachment]
+            : [];
         const comm = {
           id: `comm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           createdAt: Date.now(),
           readBy: [],
           ...payload,
+          attachments,
+          attachment: attachments[0] || null,
           targetDeviceIds: targets?.length ? targets : null,
         };
         store.communications.unshift(comm);

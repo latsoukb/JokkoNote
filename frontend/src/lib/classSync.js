@@ -28,6 +28,50 @@ export const fileToAttachment = async (file) => {
   return { type, dataUrl, fileName: file.name, mimeType: file.type };
 };
 
+export const filesToAttachments = async (fileList) => {
+  const files = Array.from(fileList || []);
+  return Promise.all(files.map(fileToAttachment));
+};
+
+export const resolveCommType = (attachments, body) => {
+  if (!attachments?.length) return COMM_TYPES.MESSAGE;
+  if (attachments.length === 1) return attachments[0].type;
+  const types = new Set(attachments.map((a) => a.type));
+  if (types.size === 1 && types.has(COMM_TYPES.PDF)) return COMM_TYPES.PDF;
+  if (types.size === 1 && types.has(COMM_TYPES.IMAGE)) return COMM_TYPES.IMAGE;
+  return COMM_TYPES.MESSAGE;
+};
+
+const stripAttachmentForSend = (att) => ({
+  type: att.type,
+  dataUrl: att.dataUrl,
+  fileName: att.fileName,
+  mimeType: att.mimeType,
+});
+
+export const buildCommPayload = ({
+  title,
+  body,
+  attachments,
+  teacherId,
+  teacherName,
+  deadlineAt,
+  targetDeviceIds,
+}) => {
+  const list = (attachments || []).map(stripAttachmentForSend);
+  return {
+    type: resolveCommType(list, body),
+    title: title?.trim() || 'Sans titre',
+    body: body?.trim() || '',
+    teacherId,
+    teacherName,
+    attachments: list.length ? list : null,
+    attachment: list[0] || null,
+    deadlineAt: deadlineAt || null,
+    targetDeviceIds: targetDeviceIds?.length ? targetDeviceIds : null,
+  };
+};
+
 export const normalizeDeviceId = (input) => {
   const raw = (input || '').trim();
   if (!raw) return '';
