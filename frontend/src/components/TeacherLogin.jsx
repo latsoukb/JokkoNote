@@ -1,13 +1,16 @@
 import React, { useState } from 'react';
+import { Sun, Moon } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import Logo from './Logo';
 import { useTeacher } from '../context/TeacherContext';
+import { useTheme } from '../context/ThemeContext';
 import { JOKKO } from '../lib/jokkoTheme';
 
 const TeacherLogin = () => {
   const { login } = useTeacher();
+  const { theme, toggleTheme } = useTheme();
   const [user, setUser] = useState('');
   const [pass, setPass] = useState('');
   const [error, setError] = useState(false);
@@ -18,7 +21,17 @@ const TeacherLogin = () => {
   };
 
   return (
-    <div className={`flex items-center justify-center px-4 ${JOKKO.page}`}>
+    <div className={`relative flex items-center justify-center px-4 ${JOKKO.page}`}>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="absolute top-4 right-4"
+        onClick={toggleTheme}
+        aria-label="Thème"
+        type="button"
+      >
+        {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+      </Button>
       <form onSubmit={submit} className={`w-full max-w-sm p-8 ${JOKKO.card} text-center`}>
         <div className="flex justify-center mb-6">
           <Logo size="lg" />

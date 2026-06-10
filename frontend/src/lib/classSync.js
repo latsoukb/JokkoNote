@@ -1,6 +1,5 @@
 /**
  * Sync prof → élève entre JokkoNote (prof) et SeNote (élève).
- * Backend : REACT_APP_JOKKO_SYNC_URL (serveur dans repo JokkoNote).
  */
 
 export const COMM_TYPES = {
@@ -29,13 +28,40 @@ export const fileToAttachment = async (file) => {
   return { type, dataUrl, fileName: file.name, mimeType: file.type };
 };
 
-export const fetchClassCommunications = async (classId) => {
+export const normalizeDeviceId = (input) => {
+  const raw = (input || '').trim();
+  if (!raw) return '';
+  if (raw.startsWith('dev-')) return raw;
+  return `dev-${raw.toUpperCase()}`;
+};
+
+export const fetchClassDetails = async (classId) => {
   const base = syncBase();
-  if (!base) return [];
-  const res = await fetch(`${base}/classes/${encodeURIComponent(classId)}/communications`);
-  if (!res.ok) throw new Error('Sync impossible');
-  const data = await res.json();
-  return data.communications || [];
+  if (!base) throw new Error('Sync non configuré');
+  const res = await fetch(`${base}/classes/${encodeURIComponent(classId)}`);
+  if (!res.ok) throw new Error('Classe introuvable');
+  return res.json();
+};
+
+export const enrollStudent = async (classId, deviceId, displayName) => {
+  const base = syncBase();
+  if (!base) throw new Error('Sync non configuré');
+  const res = await fetch(`${base}/classes/${encodeURIComponent(classId)}/students`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ deviceId: normalizeDeviceId(deviceId), displayName }),
+  });
+  if (!res.ok) throw new Error('Inscription impossible');
+  return res.json();
+};
+
+export const removeStudent = async (classId, deviceId) => {
+  const base = syncBase();
+  if (!base) return;
+  await fetch(
+    `${base}/classes/${encodeURIComponent(classId)}/students/${encodeURIComponent(normalizeDeviceId(deviceId))}`,
+    { method: 'DELETE' },
+  );
 };
 
 export const pushClassCommunication = async (classId, payload) => {
@@ -48,19 +74,6 @@ export const pushClassCommunication = async (classId, payload) => {
   });
   if (!res.ok) throw new Error('Envoi impossible');
   return res.json();
-};
-
-export const markCommunicationSeen = async (classId, commId, studentId) => {
-  const base = syncBase();
-  if (!base) return;
-  await fetch(
-    `${base}/classes/${encodeURIComponent(classId)}/communications/${encodeURIComponent(commId)}/seen`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ studentId }),
-    },
-  );
 };
 
 export const isSyncConfigured = () => Boolean(syncBase());

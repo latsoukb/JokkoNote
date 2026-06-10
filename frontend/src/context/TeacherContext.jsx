@@ -1,6 +1,20 @@
-import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import { DEMO_CLASSES, DEMO_TEACHERS } from '../mock/teachers';
-import { COMM_TYPES, isSyncConfigured, pushClassCommunication } from '../lib/classSync';
+import {
+  COMM_TYPES,
+  enrollStudent,
+  fetchClassDetails,
+  isSyncConfigured,
+  pushClassCommunication,
+  removeStudent,
+} from '../lib/classSync';
 
 const SESSION_KEY = 'jokko-teacher-session';
 
@@ -16,6 +30,8 @@ export const TeacherProvider = ({ children }) => {
     }
   });
   const [activeClassId, setActiveClassId] = useState(DEMO_CLASSES[0]?.id || 'MATH-6A');
+  const [classData, setClassData] = useState({ students: [], communications: [] });
+  const [loadingClass, setLoadingClass] = useState(false);
   const [sending, setSending] = useState(false);
 
   const login = useCallback((loginName, password) => {
@@ -31,7 +47,47 @@ export const TeacherProvider = ({ children }) => {
   const logout = useCallback(() => {
     setTeacher(null);
     sessionStorage.removeItem(SESSION_KEY);
+    setClassData({ students: [], communications: [] });
   }, []);
+
+  const refreshClass = useCallback(async () => {
+    if (!activeClassId || !isSyncConfigured()) {
+      setClassData({ students: [], communications: [] });
+      return;
+    }
+    setLoadingClass(true);
+    try {
+      const data = await fetchClassDetails(activeClassId);
+      setClassData({
+        students: data.students || [],
+        communications: data.communications || [],
+      });
+    } catch {
+      setClassData({ students: [], communications: [] });
+    } finally {
+      setLoadingClass(false);
+    }
+  }, [activeClassId]);
+
+  useEffect(() => {
+    if (teacher) refreshClass();
+  }, [teacher, refreshClass]);
+
+  const enroll = useCallback(
+    async (deviceId, displayName) => {
+      await enrollStudent(activeClassId, deviceId, displayName);
+      await refreshClass();
+    },
+    [activeClassId, refreshClass],
+  );
+
+  const unenroll = useCallback(
+    async (deviceId) => {
+      await removeStudent(activeClassId, deviceId);
+      await refreshClass();
+    },
+    [activeClassId, refreshClass],
+  );
 
   const sendToClass = useCallback(
     async ({ title, body, type, attachment }) => {
@@ -47,12 +103,14 @@ export const TeacherProvider = ({ children }) => {
           teacherName: teacher.displayName,
           attachment: attachment || null,
         };
-        return await pushClassCommunication(activeClassId, payload);
+        const comm = await pushClassCommunication(activeClassId, payload);
+        await refreshClass();
+        return comm;
       } finally {
         setSending(false);
       }
     },
-    [teacher, activeClassId],
+    [teacher, activeClassId, refreshClass],
   );
 
   const value = useMemo(
@@ -61,13 +119,30 @@ export const TeacherProvider = ({ children }) => {
       classes: DEMO_CLASSES,
       activeClassId,
       setActiveClassId,
+      classData,
+      loadingClass,
       login,
       logout,
       sendToClass,
       sending,
+      refreshClass,
+      enrollStudent: enroll,
+      removeStudent: unenroll,
       syncConfigured: isSyncConfigured(),
     }),
-    [teacher, activeClassId, login, logout, sendToClass, sending],
+    [
+      teacher,
+      activeClassId,
+      classData,
+      loadingClass,
+      login,
+      logout,
+      sendToClass,
+      sending,
+      refreshClass,
+      enroll,
+      unenroll,
+    ],
   );
 
   return <TeacherContext.Provider value={value}>{children}</TeacherContext.Provider>;
