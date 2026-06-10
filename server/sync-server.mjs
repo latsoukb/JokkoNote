@@ -53,11 +53,42 @@ const send = (res, status, body) => {
   res.end(JSON.stringify(body));
 };
 
+const bareDeviceId = (id) => (id || '').replace(/^dev-/i, '').toUpperCase();
+
+const deviceIdsMatch = (a, b) => {
+  const A = bareDeviceId(a);
+  const B = bareDeviceId(b);
+  if (!A || !B) return false;
+  if (A === B) return true;
+  if (A.startsWith(B) || B.startsWith(A)) return true;
+  if (A.slice(0, 8) === B.slice(0, 8)) return true;
+  return false;
+};
+
+const normalizeDeviceId = (input) => {
+  const raw = (input || '').trim();
+  if (!raw) return '';
+  if (raw.startsWith('dev-')) return raw;
+  return `dev-${raw.toUpperCase()}`;
+};
+
+const liteComm = (comm, classId) => ({
+  ...comm,
+  classId,
+  attachment: comm.attachment
+    ? {
+        fileName: comm.attachment.fileName,
+        mimeType: comm.attachment.mimeType,
+        hasData: Boolean(comm.attachment.dataUrl),
+      }
+    : null,
+});
+
 const findClassesForDevice = (deviceId) => {
   const matches = [];
   for (const id of listClassIds()) {
     const store = readClass(id);
-    if (store.students?.some((s) => s.deviceId === deviceId)) {
+    if (store.students?.some((s) => deviceIdsMatch(deviceId, s.deviceId))) {
       matches.push(store.classId);
     }
   }
@@ -80,15 +111,16 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // Inbox élève par appareil (pas de code classe)
+  // Inbox élève par appareil (pas de code classe) — ?lite=1 sans pièces jointes lourdes
   if (parts[0] === 'students' && parts[2] === 'inbox' && req.method === 'GET') {
     const deviceId = decodeURIComponent(parts[1]);
+    const lite = url.searchParams.get('lite') === '1';
     const classIds = findClassesForDevice(deviceId);
     const communications = [];
     for (const classId of classIds) {
       const store = readClass(classId);
       for (const comm of store.communications || []) {
-        communications.push({ ...comm, classId });
+        communications.push(lite ? liteComm(comm, classId) : { ...comm, classId });
       }
     }
     communications.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
@@ -107,18 +139,19 @@ const server = http.createServer(async (req, res) => {
   if (parts[0] === 'classes' && parts[2] === 'students' && parts.length === 3 && req.method === 'POST') {
     const classId = decodeURIComponent(parts[1]);
     const { deviceId, displayName } = await readBody(req);
-    if (!deviceId?.trim()) {
+    const normalizedId = normalizeDeviceId(deviceId);
+    if (!normalizedId) {
       send(res, 400, { error: 'deviceId requis' });
       return;
     }
     const store = readClass(classId);
-    const existing = store.students.find((s) => s.deviceId === deviceId);
+    const existing = store.students.find((s) => deviceIdsMatch(normalizedId, s.deviceId));
     if (existing) {
       existing.displayName = displayName?.trim() || existing.displayName;
       existing.updatedAt = Date.now();
     } else {
       store.students.push({
-        deviceId: deviceId.trim(),
+        deviceId: normalizedId,
         displayName: displayName?.trim() || 'Élève',
         enrolledAt: Date.now(),
       });
@@ -132,9 +165,27 @@ const server = http.createServer(async (req, res) => {
     const classId = decodeURIComponent(parts[1]);
     const deviceId = decodeURIComponent(parts[3]);
     const store = readClass(classId);
-    store.students = store.students.filter((s) => s.deviceId !== deviceId);
+    store.students = store.students.filter((s) => !deviceIdsMatch(deviceId, s.deviceId));
     writeClass(classId, store);
     send(res, 200, { ok: true });
+    return;
+  }
+
+  if (
+    parts[0] === 'classes' &&
+    parts[2] === 'communications' &&
+    parts.length === 4 &&
+    req.method === 'GET'
+  ) {
+    const classId = decodeURIComponent(parts[1]);
+    const commId = decodeURIComponent(parts[3]);
+    const store = readClass(classId);
+    const comm = store.communications.find((c) => c.id === commId);
+    if (!comm) {
+      send(res, 404, { error: 'Message introuvable' });
+      return;
+    }
+    send(res, 200, { ...comm, classId });
     return;
   }
 
@@ -174,7 +225,7 @@ const server = http.createServer(async (req, res) => {
     const comm = store.communications.find((c) => c.id === commId);
     if (comm && deviceId) {
       comm.readBy = comm.readBy || [];
-      const idx = comm.readBy.findIndex((r) => r.deviceId === deviceId);
+      const idx = comm.readBy.findIndex((r) => deviceIdsMatch(r.deviceId, deviceId));
       const entry = {
         deviceId,
         displayName: displayName || 'Élève',

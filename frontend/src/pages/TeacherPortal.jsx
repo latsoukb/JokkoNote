@@ -173,7 +173,7 @@ const TeacherPortal = () => {
             Inscrire un élève
           </h2>
           <p className={`text-sm ${JOKKO.muted}`}>
-            L&apos;élève vous donne le code affiché dans SeNote (Réception).
+            L&apos;élève vous donne les <strong>8 caractères</strong> affichés dans SeNote → Réception.
           </p>
           <form onSubmit={handleEnroll} className="grid sm:grid-cols-2 gap-3">
             <div className="space-y-2">
