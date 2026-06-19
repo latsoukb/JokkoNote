@@ -172,7 +172,7 @@ const server = http.createServer(async (req, res) => {
       const { login, password } = await readBody(req);
       const teacher = await findTeacherByLogin(login);
       if (!teacher || !verifyTeacherPassword(teacher, password)) {
-        send(res, 401, { error: 'Identifiants incorrects' });
+        send(res, 401, { error: 'Identifiant ou mot de passe incorrect' });
         return;
       }
       send(res, 200, { teacher: publicTeacher(teacher) });

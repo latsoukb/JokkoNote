@@ -17,13 +17,24 @@ const TeacherLogin = () => {
   const [registerUser, setRegisterUser] = useState('');
   const [registerPass, setRegisterPass] = useState('');
   const [registerPassConfirm, setRegisterPassConfirm] = useState('');
-  const [displayName, setDisplayName] = useState('');
+  const [titlePrefix, setTitlePrefix] = useState('');
+  const [lastName, setLastName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const switchMode = (next) => {
     setMode(next);
     setError('');
+    if (next === 'login') {
+      setTitlePrefix('');
+      setLastName('');
+    }
+  };
+
+  const buildDisplayName = () => {
+    const family = lastName.trim();
+    if (!titlePrefix) return '';
+    return titlePrefix === 'M' ? `M. ${family}` : `Mme ${family}`;
   };
 
   const submit = async (e) => {
@@ -32,6 +43,14 @@ const TeacherLogin = () => {
     setLoading(true);
     try {
       if (mode === 'register') {
+        if (!titlePrefix) {
+          setError('Choisissez M. ou Mme');
+          return;
+        }
+        if (!lastName.trim()) {
+          setError('Indiquez votre nom de famille');
+          return;
+        }
         if (registerPass.length < 6) {
           setError('Mot de passe : 6 caractères minimum');
           return;
@@ -40,7 +59,7 @@ const TeacherLogin = () => {
           setError('Les mots de passe ne correspondent pas');
           return;
         }
-        await register(registerUser, registerPass, displayName || registerUser);
+        await register(registerUser, registerPass, buildDisplayName());
       } else {
         await login(loginUser, loginPass);
       }
@@ -93,15 +112,44 @@ const TeacherLogin = () => {
 
         <div className="space-y-3 text-left mb-4">
           {mode === 'register' && (
-            <div className="space-y-1">
-              <Label htmlFor="displayName">Nom affiché</Label>
+            <div className="space-y-2">
+              <Label>Nom affiché</Label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTitlePrefix('M')}
+                  className={`flex-1 py-2 text-sm rounded-md border transition-colors ${
+                    titlePrefix === 'M'
+                      ? 'border-jokko bg-jokko/10 font-medium'
+                      : 'border-neutral-200 dark:border-neutral-700'
+                  }`}
+                >
+                  M.
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTitlePrefix('Mme')}
+                  className={`flex-1 py-2 text-sm rounded-md border transition-colors ${
+                    titlePrefix === 'Mme'
+                      ? 'border-jokko bg-jokko/10 font-medium'
+                      : 'border-neutral-200 dark:border-neutral-700'
+                  }`}
+                >
+                  Mme
+                </button>
+              </div>
               <Input
-                id="displayName"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="M. Diop"
+                id="lastName"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                placeholder="Nom de famille"
                 className={JOKKO.input}
+                required
+                autoComplete="family-name"
               />
+              {titlePrefix && lastName.trim() && (
+                <p className={`text-xs ${JOKKO.muted}`}>Aperçu : {buildDisplayName()}</p>
+              )}
             </div>
           )}
           <div className="space-y-1">
