@@ -15,18 +15,17 @@ import {
   CalendarClock,
   Plus,
   Pencil,
+  GraduationCap,
 } from 'lucide-react';
 import Logo from '../components/Logo';
+import JokkoDialog from '../components/JokkoDialog';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import {
   Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+  DialogClose,
   DialogTrigger,
 } from '../components/ui/dialog';
 import { useTeacher } from '../context/TeacherContext';
@@ -213,23 +212,61 @@ const TeacherPortal = () => {
                   Nouvelle
                 </Button>
               </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Créer une classe</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-3 py-2">
-                  <div className="space-y-1">
-                    <Label htmlFor="new-class-id">Code classe (ex. MATH-6A)</Label>
+              <JokkoDialog
+                icon={GraduationCap}
+                title="Créer une classe"
+                description="Les élèves rejoignent avec le code classe dans SeNote."
+                footer={
+                  <>
+                    <DialogClose asChild>
+                      <Button type="button" variant="ghost" className={JOKKO.btnGhost}>
+                        Annuler
+                      </Button>
+                    </DialogClose>
+                    <Button
+                      type="button"
+                      className={JOKKO.btnPrimary}
+                      onClick={async () => {
+                        try {
+                          await addClass({
+                            classId: newClassId.trim(),
+                            name: newClassName.trim() || newClassId.trim(),
+                          });
+                          toast.success('Classe créée');
+                          setNewClassId('');
+                          setNewClassName('');
+                          setClassDialogOpen(false);
+                        } catch (err) {
+                          toast.error(err.message || 'Erreur');
+                        }
+                      }}
+                    >
+                      Créer la classe
+                    </Button>
+                  </>
+                }
+              >
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="new-class-id" className="text-sm font-medium">
+                      Code classe
+                    </Label>
                     <Input
                       id="new-class-id"
                       value={newClassId}
                       onChange={(e) => setNewClassId(e.target.value.toUpperCase())}
                       placeholder="MATH-6A"
                       className={JOKKO.input}
+                      autoFocus
                     />
+                    <p className={JOKKO.fieldHint}>
+                      Court et unique — les élèves le saisissent pour s&apos;inscrire.
+                    </p>
                   </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="new-class-name">Nom affiché</Label>
+                  <div className="space-y-2">
+                    <Label htmlFor="new-class-name" className="text-sm font-medium">
+                      Nom affiché
+                    </Label>
                     <Input
                       id="new-class-name"
                       value={newClassName}
@@ -237,30 +274,10 @@ const TeacherPortal = () => {
                       placeholder="Mathématiques 6ème A"
                       className={JOKKO.input}
                     />
+                    <p className={JOKKO.fieldHint}>Libellé visible dans votre liste de classes.</p>
                   </div>
                 </div>
-                <DialogFooter>
-                  <Button
-                    className={JOKKO.btnPrimary}
-                    onClick={async () => {
-                      try {
-                        await addClass({
-                          classId: newClassId.trim(),
-                          name: newClassName.trim() || newClassId.trim(),
-                        });
-                        toast.success('Classe créée');
-                        setNewClassId('');
-                        setNewClassName('');
-                        setClassDialogOpen(false);
-                      } catch (err) {
-                        toast.error(err.message || 'Erreur');
-                      }
-                    }}
-                  >
-                    Créer
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
+              </JokkoDialog>
             </Dialog>
           </div>
           {classes.length === 0 && (
@@ -302,32 +319,48 @@ const TeacherPortal = () => {
                     Renommer
                   </Button>
                 </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Renommer la classe</DialogTitle>
-                  </DialogHeader>
-                  <Input
-                    value={editClassName}
-                    onChange={(e) => setEditClassName(e.target.value)}
-                    className={JOKKO.input}
-                  />
-                  <DialogFooter>
-                    <Button
-                      className={JOKKO.btnPrimary}
-                      onClick={async () => {
-                        try {
-                          await editClass(activeClassId, editClassName);
-                          toast.success('Classe mise à jour');
-                          setEditDialogOpen(false);
-                        } catch (err) {
-                          toast.error(err.message || 'Erreur');
-                        }
-                      }}
-                    >
-                      Enregistrer
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
+                <JokkoDialog
+                  icon={Pencil}
+                  title="Renommer la classe"
+                  description={`Code : ${activeClassId}`}
+                  footer={
+                    <>
+                      <DialogClose asChild>
+                        <Button type="button" variant="ghost" className={JOKKO.btnGhost}>
+                          Annuler
+                        </Button>
+                      </DialogClose>
+                      <Button
+                        type="button"
+                        className={JOKKO.btnPrimary}
+                        onClick={async () => {
+                          try {
+                            await editClass(activeClassId, editClassName);
+                            toast.success('Classe mise à jour');
+                            setEditDialogOpen(false);
+                          } catch (err) {
+                            toast.error(err.message || 'Erreur');
+                          }
+                        }}
+                      >
+                        Enregistrer
+                      </Button>
+                    </>
+                  }
+                >
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-class-name" className="text-sm font-medium">
+                      Nom affiché
+                    </Label>
+                    <Input
+                      id="edit-class-name"
+                      value={editClassName}
+                      onChange={(e) => setEditClassName(e.target.value)}
+                      className={JOKKO.input}
+                      autoFocus
+                    />
+                  </div>
+                </JokkoDialog>
               </Dialog>
               <Button
                 variant="outline"
